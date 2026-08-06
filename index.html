@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Phần Mềm Báo Cáo Sản Lượng - Sơn La Water</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans">
+
+  <!-- MÀN HÌNH ĐĂNG NHẬP (Chỉ hiện khi chưa đăng nhập) -->
+  <div id="loginScreen" class="min-h-screen flex items-center justify-center bg-blue-900">
+    <div class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-md">
+      <div class="text-center mb-6">
+        <h2 class="text-2xl font-bold text-blue-800">SƠN LA WATER</h2>
+        <p class="text-slate-500 text-sm">Hệ Thống Quản Lý Sản Lượng</p>
+      </div>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium mb-1">Email nội bộ đăng nhập</label>
+          <input type="email" id="loginEmail" placeholder="ví dụ: dong.pp@sonlawater.vn" class="w-full border rounded-lg p-3 focus:ring-blue-500 focus:border-blue-500">
+        </div>
+        <button onclick="handleLogin()" id="btnLogin" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium p-3 rounded-lg transition">Đăng nhập hệ thống</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ỨNG DỤNG CHÍNH (Được ẩn đi cho đến khi đăng nhập thành công) -->
+  <div id="mainApp" class="hidden">
+    <!-- TOP BAR -->
+    <nav class="bg-blue-800 text-white p-4 flex justify-between items-center shadow-lg">
+      <h1 class="text-lg font-bold uppercase tracking-wider">Hệ thống Báo cáo Sản lượng</h1>
+      <div class="flex items-center space-x-3">
+        <div class="flex flex-col text-right mr-2 hidden sm:block">
+            <span id="userName" class="text-sm font-semibold">Tên người dùng</span>
+            <span id="userRoleStr" class="text-xs text-blue-200">Chức vụ</span>
+        </div>
+        <button onclick="logout()" class="bg-red-500 hover:bg-red-600 px-3 py-1.5 rounded text-sm font-medium transition">Đăng xuất</button>
+      </div>
+    </nav>
+
+    <div class="container mx-auto p-4 sm:p-6">
+      <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        
+        <!-- CỘT 1: FORM NHẬP CHỈ SỐ -->
+        <div class="bg-white p-6 rounded-xl shadow-md border-t-4 border-blue-600 h-fit">
+          <h2 class="text-lg font-semibold text-blue-800 mb-4 border-b pb-2">NHẬP CHỈ SỐ SẢN LƯỢNG</h2>
+          <form id="inputForm" class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium mb-1">Ngày ghi nhận</label>
+              <input type="date" id="ngayGhi" class="w-full border rounded p-2" required>
+            </div>
+            
+            <!-- Đơn vị bị khóa nếu là USER -->
+            <div>
+              <label class="block text-sm font-medium mb-1">Đơn vị / Xí nghiệp</label>
+              <select id="maDonVi" onchange="updateStationDropdown('maDonVi', 'maTram')" class="w-full border rounded p-2 bg-gray-50" required>
+                  <!-- Được Render bằng JS -->
+              </select>
+            </div>
+            
+            <div>
+              <label class="block text-sm font-medium mb-1">Trạm bơm / Nhà máy</label>
+              <select id="maTram" onchange="fetchLastIndex()" class="w-full border rounded p-2 focus:ring-blue-500" required>
+                  <!-- Được Render tự động theo Đơn Vị -->
+              </select>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4 border-t pt-4 mt-2">
+              <div>
+                <!-- CHỈ SỐ ĐẦU (KHÓA LẠI - AUTO LOAD) -->
+                <label class="block text-sm font-medium mb-1 text-slate-600">Chỉ số đầu (Khóa)</label>
+                <div class="relative">
+                  <input type="number" id="chiSoDau" class="w-full border rounded p-2 bg-slate-100 text-slate-600 font-medium" readonly>
+                  <span id="loadingIdx" class="absolute right-2 top-2 text-xs text-blue-500 hidden">Đang tải...</span>
+                </div>
+              </div>
+              <div>
+                <!-- CHỈ SỐ CUỐI (NGƯỜI DÙNG NHẬP) -->
+                <label class="block text-sm font-medium mb-1 text-blue-700">Chỉ số cuối (Nhập)</label>
+                <input type="number" id="chiSoCuoi" class="w-full border-2 border-blue-400 rounded p-2 font-bold focus:ring-blue-500" placeholder="Nhập số cuối..." required>
+              </div>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm font-medium mb-1">Xả rửa (m³)</label>
+                  <input type="number" id="sanLuongXaRua" class="w-full border rounded p-2" placeholder="0" value="0">
+                </div>
+                <div>
+                  <label class="block text-sm font-medium mb-1 text-emerald-700">Sản lượng phát (m³)</label>
+                  <input type="number" id="sanLuongPhat" class="w-full border rounded p-2 bg-emerald-50 font-bold text-emerald-700" readonly>
+                </div>
+            </div>
+            <button type="submit" id="btnSubmitForm" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium p-3 rounded-lg transition shadow-md mt-4">LƯU CHỈ SỐ VÀO DATABASE</button>
+          </form>
+        </div>
+
+        <!-- CỘT 2: DASHBOARD TỔNG THỂ -->
+        <div class="xl:col-span-2 bg-white p-6 rounded-xl shadow-md border-t-4 border-emerald-500 space-y-4">
+          <div class="flex flex-col md:flex-row justify-between items-start md:items-center border-b pb-3 gap-4">
+            <h2 class="text-lg font-semibold text-emerald-800 whitespace-nowrap">DASHBOARD</h2>
+            
+            <!-- BỘ LỌC ĐA TẦNG -->
+            <div class="flex flex-wrap items-center gap-2 text-sm bg-gray-50 p-2 rounded-lg border w-full md:w-auto">
+              <input type="date" id="filterTuNgay" class="border rounded p-1">
+              <span>đến</span>
+              <input type="date" id="filterDenNgay" class="border rounded p-1">
+              
+              <select id="filterDonVi" onchange="updateStationDropdown('filterDonVi', 'filterTram', true)" class="border rounded p-1 bg-white">
+                <option value="ALL">Toàn công ty</option>
+              </select>
+              <select id="filterTram" class="border rounded p-1 bg-white w-24">
+                <option value="ALL">Tất cả Trạm</option>
+              </select>
+              
+              <button onclick="alert('Đang nâng cấp module tính tổng biểu đồ API')" class="bg-emerald-600 text-white px-3 py-1.5 rounded hover:bg-emerald-700 font-medium">Lọc</button>
+            </div>
+          </div>
+
+          <!-- Giao diện giữ chỗ Biểu đồ -->
+          <div class="flex items-center justify-center h-64 bg-slate-50 border rounded-lg border-dashed">
+            <p class="text-slate-400">Khu vực Biểu đồ Tự động (Sẽ tích hợp sau khi API đồng bộ hoàn tất)</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- THAY ĐƯỜNG LINK API MỚI VÀO ĐÂY ---
+    const API_URL = "https://script.google.com/macros/s/AKfycbyZZZtFBhJlVdDEjCPzK879RxjG20qhYnRBL6I9Z5SsQl9MH2A1XjErPoGK63jSMg9ntw/exec";
+    
+    // --- DATABASE DANH MỤC (Đã bóc tách từ Excel của anh) ---
+    const DULIEU_DANHMUC = {
+      "XNTP1": { ten: "Xí nghiệp Cấp nước TP1", tram: { "XNTP1_T1": "Nhà máy chính TP1", "XNTP1_T2": "VBIC Trạm Bản Mòng", "XNTP1_T3": "ĐH tách Bản Kham" } },
+      "XNTP2": { ten: "Xí nghiệp Cấp nước TP2", tram: { "XNTP2_T1": "Trạm số 1 (Tuyến Bơm)", "XNTP2_T2": "Trạm Số 2 (Tuyến Tự Chảy)" } },
+      "MS": { ten: "XNCN Mai Sơn", tram: { "MS_T1": "Trạm Nà Sản", "MS_T2": "Trạm 19/5", "MS_T3": "Cò Nòi", "MS_T4": "Trạm Bình Minh" } },
+      "MC": { ten: "XNCN Mộc Châu", tram: { "MC_T1": "Trạm Bưu điện", "MC_T2": "Trạm Vân Hồ" } },
+      "YC": { ten: "XNCN Yên Châu", tram: { "YC_T1": "Trạm Bát Đông", "YC_T2": "Trạm Suối Sập" } },
+      "PY": { ten: "XNCN Phù Yên", tram: { "PY_T1": "Trạm Nà Xá", "PY_T2": "Trạm Suối Ngọt" } },
+      "BY": { ten: "XNCN Bắc Yên", tram: { "BY_T1": "Trạm Phiêng ban" } },
+      "TC": { ten: "XNCN Thuận Châu", tram: { "TC_T1": "Trạm chính" } },
+      "SM": { ten: "XNCN Sông Mã", tram: { "SM_T1": "Trạm Sông Mã" } },
+      "SC": { ten: "XNCN Sốp Cộp", tram: { "SC_T1": "Trạm chính SC", "SC_T2": "Trạm Nậm Lạnh" } },
+      "ML": { ten: "XNCN Mường La", tram: { "ML_T1": "Bệnh Viện", "ML_T2": "Nà Lốc", "ML_T3": "Sân Bay" } },
+      "QN": { ten: "XNCN Quỳnh Nhai", tram: { "QN_T1": "Trạm chính QN" } }
+    };
+
+    let currentUser = null; // Lưu phiên đăng nhập
+
+    // 1. CHỨC NĂNG ĐĂNG NHẬP
+    function handleLogin() {
+      const email = document.getElementById('loginEmail').value.trim();
+      if(!email) return alert("Vui lòng nhập Email!");
+      
+      document.getElementById('btnLogin').innerText = "Đang kiểm tra quyền...";
+      
+      fetch(API_URL + "?action=getUserRole&email=" + encodeURIComponent(email))
+        .then(res => res.json())
+        .then(data => {
+          if(data.status === 'SUCCESS') {
+            currentUser = data;
+            document.getElementById('loginScreen').classList.add('hidden');
+            document.getElementById('mainApp').classList.remove('hidden');
+            
+            // Render Info
+            document.getElementById('userName').innerText = data.name;
+            document.getElementById('userRoleStr').innerText = data.role === 'ADMIN' ? 'Quản trị hệ thống' : 'Quản lý đơn vị';
+            
+            initUI(); // Khởi tạo giao diện dựa trên quyền
+          } else {
+            alert(data.message || "Tài khoản không có quyền truy cập!");
+            document.getElementById('btnLogin').innerText = "Đăng nhập hệ thống";
+          }
+        })
+        .catch(err => { alert("Lỗi kết nối máy chủ Google!"); document.getElementById('btnLogin').innerText = "Đăng nhập hệ thống"; });
+    }
+    
+    function logout() { location.reload(); }
+
+    // 2. KHỞI TẠO GIAO DIỆN & DROPDOWN DỰA THEO QUYỀN (Role-Based)
+    function initUI() {
+      const selectDV = document.getElementById('maDonVi');
+      const filterDV = document.getElementById('filterDonVi');
+      
+      selectDV.innerHTML = '';
+      if(currentUser.role === 'ADMIN') {
+        // Render toàn bộ Đơn vị
+        for(let key in DULIEU_DANHMUC) {
+          selectDV.innerHTML += `<option value="${key}">${DULIEU_DANHMUC[key].ten}</option>`;
+          filterDV.innerHTML += `<option value="${key}">${DULIEU_DANHMUC[key].ten}</option>`;
+        }
+      } else {
+        // Chỉ Render Đơn vị được phép của nhân viên đó
+        let key = currentUser.donVi;
+        if(DULIEU_DANHMUC[key]) {
+          selectDV.innerHTML = `<option value="${key}">${DULIEU_DANHMUC[key].ten}</option>`;
+          filterDV.innerHTML = `<option value="${key}">${DULIEU_DANHMUC[key].ten}</option>`;
+          selectDV.setAttribute('readonly', true); // Khóa dropdown
+          selectDV.classList.add('bg-slate-200');
+        }
+      }
+      
+      // Load Trạm mặc định cho đơn vị đầu tiên
+      updateStationDropdown('maDonVi', 'maTram');
+      updateStationDropdown('filterDonVi', 'filterTram', true);
+      
+      // Set Ngày mặc định
+      document.getElementById('ngayGhi').valueAsDate = new Date();
+      let d = new Date();
+      document.getElementById('filterTuNgay').valueAsDate = new Date(d.getFullYear(), d.getMonth()-1, 27);
+      document.getElementById('filterDenNgay').valueAsDate = new Date(d.getFullYear(), d.getMonth(), 26);
+    }
+
+    // Cập nhật Dropdown Trạm theo Đơn vị (Cascading)
+    function updateStationDropdown(idDonVi, idTram, isFilter = false) {
+      const maDV = document.getElementById(idDonVi).value;
+      const selectTram = document.getElementById(idTram);
+      selectTram.innerHTML = isFilter ? '<option value="ALL">Tất cả Trạm</option>' : '';
+      
+      if(maDV !== 'ALL' && DULIEU_DANHMUC[maDV]) {
+        const trams = DULIEU_DANHMUC[maDV].tram;
+        for(let tKey in trams) {
+          selectTram.innerHTML += `<option value="${tKey}">${trams[tKey]}</option>`;
+        }
+      }
+      // Nếu là Form nhập liệu, gọi API lấy chỉ số cuối của trạm đầu tiên vừa load
+      if(!isFilter) fetchLastIndex(); 
+    }
+
+    // 3. TỰ ĐỘNG GỌI API LẤY CHỈ SỐ CUỐI ĐIỀN VÀO CHỈ SỐ ĐẦU
+    function fetchLastIndex() {
+      const maTram = document.getElementById('maTram').value;
+      const lblLoading = document.getElementById('loadingIdx');
+      const elChiSoDau = document.getElementById('chiSoDau');
+      
+      if(!maTram) return;
+      
+      lblLoading.classList.remove('hidden');
+      elChiSoDau.value = ""; // Clear số cũ
+      
+      fetch(`${API_URL}?action=getLastIndex&maTram=${maTram}`)
+        .then(res => res.json())
+        .then(data => {
+          elChiSoDau.value = data.chiSoCuoi || 0; // Gán tự động vào Chỉ Số Đầu (Đã bị khóa readonly)
+          lblLoading.classList.add('hidden');
+          calc(); // Tính lại sản lượng
+        })
+        .catch(err => {
+          lblLoading.innerText = "Lỗi!";
+        });
+    }
+
+    // 4. TÍNH TOÁN SẢN LƯỢNG
+    const elDau = document.getElementById('chiSoDau');
+    const elCuoi = document.getElementById('chiSoCuoi');
+    const elPhat = document.getElementById('sanLuongPhat');
+    const elXaRua = document.getElementById('sanLuongXaRua');
+
+    function calc() {
+      let d = parseFloat(elDau.value) || 0;
+      let c = parseFloat(elCuoi.value) || 0;
+      let xr = parseFloat(elXaRua.value) || 0;
+      
+      let ketQua = (c - d) - xr;
+      
+      // Báo đỏ nếu người dùng nhập số cuối nhỏ hơn số đầu (Sai logic)
+      if(ketQua < 0) {
+        elCuoi.classList.add('border-red-500', 'bg-red-50');
+        elPhat.value = 0;
+      } else {
+        elCuoi.classList.remove('border-red-500', 'bg-red-50');
+        elPhat.value = ketQua;
+      }
+    }
+    elCuoi.addEventListener('input', calc);
+    elXaRua.addEventListener('input', calc);
+
+    // 5. GỬI SỐ LIỆU (POST) LÊN GOOGLE SHEETS
+    document.getElementById('inputForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        let c = parseFloat(elCuoi.value) || 0;
+        let d = parseFloat(elDau.value) || 0;
+        if(c < d) return alert("CẢNH BÁO: Chỉ số cuối không được nhỏ hơn Chỉ số đầu!");
+
+        const payload = {
+            ngayGhi: document.getElementById('ngayGhi').value,
+            maDonVi: document.getElementById('maDonVi').value,
+            maTram: document.getElementById('maTram').value,
+            chiSoDau: d,
+            chiSoCuoi: c,
+            sanLuongPhat: document.getElementById('sanLuongPhat').value,
+            sanLuongXaRua: document.getElementById('sanLuongXaRua').value,
+            nguoiNhap: currentUser.email // Lấy đúng email đã đăng nhập
+        };
+        
+        const btn = document.getElementById('btnSubmitForm');
+        const oldText = btn.innerText;
+        btn.innerText = "Đang lưu...";
+        btn.disabled = true;
+
+        fetch(API_URL, {
+            method: 'POST',
+            mode: 'no-cors', // Bỏ qua lỗi CORS
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // Dùng text/plain để tránh preflight
+            body: JSON.stringify(payload)
+        }).then(() => {
+            alert("Lưu Chỉ Số Thành Công!");
+            btn.innerText = oldText;
+            btn.disabled = false;
+            
+            // Thành công thì gán Chỉ số cuối vừa nhập thành Chỉ số đầu của lần nhập tiếp theo
+            document.getElementById('chiSoDau').value = payload.chiSoCuoi;
+            document.getElementById('chiSoCuoi').value = "";
+            document.getElementById('sanLuongXaRua').value = 0;
+            document.getElementById('sanLuongPhat').value = "";
+            
+        }).catch(err => {
+            alert("Mạng chậm, vui lòng thử lại!");
+            btn.innerText = oldText;
+            btn.disabled = false;
+        });
+    });
+  </script>
+</body>
+</html>
