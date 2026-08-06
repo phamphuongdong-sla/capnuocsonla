@@ -73,13 +73,12 @@
                 <label class="block text-sm font-medium mb-1 text-slate-600">Chỉ số đầu (Khóa)</label>
                 <div class="relative">
                   <input type="number" id="chiSoDau" class="w-full border rounded p-2 bg-slate-100 text-slate-600 font-medium" readonly>
-                  <span id="loadingIdx" class="absolute right-2 top-2 text-xs text-blue-500 hidden">Đang tải...</span>
                 </div>
               </div>
               <div>
                 <!-- CHỈ SỐ CUỐI (NGƯỜI DÙNG NHẬP) -->
                 <label class="block text-sm font-medium mb-1 text-blue-700">Chỉ số cuối (Nhập)</label>
-                <input type="number" id="chiSoCuoi" class="w-full border-2 border-blue-400 rounded p-2 font-bold focus:ring-blue-500" placeholder="Nhập số cuối..." required>
+                <input type="number" id="chiSoCuoi" class="w-full border-2 border-blue-400 rounded p-2 font-bold focus:ring-blue-500" placeholder="Số cuối..." required>
               </div>
             </div>
             
@@ -111,18 +110,40 @@
               <select id="filterDonVi" onchange="updateStationDropdown('filterDonVi', 'filterTram', true)" class="border rounded p-1 bg-white">
                 <option value="ALL">Toàn công ty</option>
               </select>
-              <select id="filterTram" class="border rounded p-1 bg-white w-24">
+              <select id="filterTram" class="border rounded p-1 bg-white max-w-[150px]">
                 <option value="ALL">Tất cả Trạm</option>
               </select>
               
-              <button onclick="alert('Đang nâng cấp module tính tổng biểu đồ API')" class="bg-emerald-600 text-white px-3 py-1.5 rounded hover:bg-emerald-700 font-medium">Lọc</button>
+              <button id="btnLocDashboard" class="bg-emerald-600 text-white px-3 py-1.5 rounded hover:bg-emerald-700 font-medium whitespace-nowrap">Đồng bộ & Lọc</button>
             </div>
           </div>
 
-          <!-- Giao diện giữ chỗ Biểu đồ -->
-          <div class="flex items-center justify-center h-64 bg-slate-50 border rounded-lg border-dashed">
-            <p class="text-slate-400">Khu vực Biểu đồ Tự động (Sẽ tích hợp sau khi API đồng bộ hoàn tất)</p>
+          <!-- KPI CARDS -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+            <div class="bg-blue-50 p-4 rounded-xl text-center shadow-sm border border-blue-100">
+              <div class="text-sm font-medium text-blue-600 mb-1">TỔNG SẢN LƯỢNG</div>
+              <div class="text-2xl font-bold text-blue-800" id="kpiTong">-- <span class="text-base font-normal">m³</span></div>
+            </div>
+            <div class="bg-emerald-50 p-4 rounded-xl text-center shadow-sm border border-emerald-100">
+              <div class="text-sm font-medium text-emerald-600 mb-1">TRUNG BÌNH / NGÀY</div>
+              <div class="text-2xl font-bold text-emerald-800" id="kpiTB">-- <span class="text-base font-normal">m³</span></div>
+            </div>
+            <div class="bg-amber-50 p-4 rounded-xl text-center shadow-sm border border-amber-100">
+              <div class="text-sm font-medium text-amber-600 mb-1">NGÀY ĐỈNH ĐIỂM</div>
+              <div class="text-2xl font-bold text-amber-800" id="kpiMax">-- <span class="text-base font-normal">m³</span></div>
+            </div>
           </div>
+
+          <!-- CHARTS -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+              <div class="border rounded-lg p-3 relative h-64">
+                  <canvas id="lineChart"></canvas>
+              </div>
+              <div class="border rounded-lg p-3 relative h-64">
+                  <canvas id="barChart"></canvas>
+              </div>
+          </div>
+
         </div>
 
       </div>
@@ -130,33 +151,37 @@
   </div>
 
   <script>
-    // --- THAY ĐƯỜNG LINK API MỚI VÀO ĐÂY ---
-    const API_URL = "https://script.google.com/macros/s/AKfycbyZZZtFBhJlVdDEjCPzK879RxjG20qhYnRBL6I9Z5SsQl9MH2A1XjErPoGK63jSMg9ntw/exec";
+    // --- API URL CHÍNH THỨC ---
+    const API_URL = "https://script.google.com/macros/s/AKfycbxCucrSJHVBD1l7GlDOqk_owUzAMobS5vrw8WuBJc0FBvdlhhArnjTPTYS5LTviCVKSEg/exec";
     
-    // --- DATABASE DANH MỤC (Đã bóc tách từ Excel của anh) ---
+    // --- DATABASE DANH MỤC TRẠM ---
     const DULIEU_DANHMUC = {
-      "XNTP1": { ten: "Xí nghiệp Cấp nước TP1", tram: { "XNTP1_T1": "Nhà máy chính TP1", "XNTP1_T2": "VBIC Trạm Bản Mòng", "XNTP1_T3": "ĐH tách Bản Kham" } },
-      "XNTP2": { ten: "Xí nghiệp Cấp nước TP2", tram: { "XNTP2_T1": "Trạm số 1 (Tuyến Bơm)", "XNTP2_T2": "Trạm Số 2 (Tuyến Tự Chảy)" } },
-      "MS": { ten: "XNCN Mai Sơn", tram: { "MS_T1": "Trạm Nà Sản", "MS_T2": "Trạm 19/5", "MS_T3": "Cò Nòi", "MS_T4": "Trạm Bình Minh" } },
-      "MC": { ten: "XNCN Mộc Châu", tram: { "MC_T1": "Trạm Bưu điện", "MC_T2": "Trạm Vân Hồ" } },
+      "XNTP1": { ten: "Xí nghiệp Cấp nước TP1", tram: { "XNTP1_T1": "Nhà máy chính TP1", "XNTP1_T2": "VBIC Trạm Bản Mòng", "XNTP1_T3": "ĐH tách Bản Kham", "XNTP1_T4": "Xn1 bơm Xn2", "XNTP1_T5": "Sản lượng rửa ống", "XNTP1_T6": "DH cấp bể Nậm La", "XNTP1_T7": "Trạm KM10", "XNTP1_T8": "Trạm KM11", "XNTP1_T9": "Trạm KM6", "XNTP1_T10": "Trạm KM7", "XNTP1_T11": "ĐH tổng Vibic", "XNTP1_T12": "ĐH tổng TP1", "XNTP1_T13": "Sản lượng cộng thêm ĐH trạm km7 không ổn định", "XNTP1_T14": "Trừ ĐH đổ vào bể KM7", "XNTP1_T15": "Trừ SL nước lấy vào bể Trạm Km11", "XNTP1_T16": "Nước xả rửa tuyến ống Vbic", "XNTP1_T17": "Nước xả rửa tuyến ống" } },
+      "XNTP2": { ten: "Xí nghiệp Cấp nước TP2", tram: { "XNTP2_T1": "Trạm số 1 (Tuyến Bơm)", "XNTP2_T2": "Trạm Số 2 (Tuyến Tự Chảy)", "XNTP2_T3": "Trạm số 3 (Tuyến XM)", "XNTP2_T4": "Trạm bơm tăng áp" } },
+      "MS": { ten: "XNCN Mai Sơn", tram: { "MS_T1": "Trạm Nà Sản", "MS_T2": "Trạm 19/5", "MS_T3": "Trạm 19/5 2", "MS_T4": "Trạm 19/5 3", "MS_T5": "Cò Nòi", "MS_T6": "Cò Nòi 26/3", "MS_T7": "Trạm Nà Sản bơm về trạm 2 Mai Sơn", "MS_T8": "Trừ tổng cò nòi bơm hỗ trợ trạm chính bị ô nhiễm", "MS_T9": "Trạm Bình Minh", "MS_T10": "Trừ tổng trạm 19.5 bơm nước hỗ trợ trạm chính bị ô nhiễm", "MS_T11": "Trạm bình Minh 1", "MS_T12": "Trừ sản lượng các trạm bơm hỗ trợ" } },
+      "MC": { ten: "XNCN Mộc Châu", tram: { "MC_T1": "Trạm Bưu điện", "MC_T2": "Trạm Vân Hồ", "MC_T3": "Bù sản lượng tháng 6" } },
       "YC": { ten: "XNCN Yên Châu", tram: { "YC_T1": "Trạm Bát Đông", "YC_T2": "Trạm Suối Sập" } },
       "PY": { ten: "XNCN Phù Yên", tram: { "PY_T1": "Trạm Nà Xá", "PY_T2": "Trạm Suối Ngọt" } },
-      "BY": { ten: "XNCN Bắc Yên", tram: { "BY_T1": "Trạm Phiêng ban" } },
-      "TC": { ten: "XNCN Thuận Châu", tram: { "TC_T1": "Trạm chính" } },
+      "BY": { ten: "XNCN Bắc Yên", tram: { "BY_T1": "Trạm Phiêng ban", "BY_T2": "Cấp cho KH nước thô" } },
+      "TC": { ten: "XNCN Thuận Châu", tram: { "TC_T1": "Trạm chính", "TC_T2": "Trạm Tông lệnh" } },
       "SM": { ten: "XNCN Sông Mã", tram: { "SM_T1": "Trạm Sông Mã" } },
-      "SC": { ten: "XNCN Sốp Cộp", tram: { "SC_T1": "Trạm chính SC", "SC_T2": "Trạm Nậm Lạnh" } },
-      "ML": { ten: "XNCN Mường La", tram: { "ML_T1": "Bệnh Viện", "ML_T2": "Nà Lốc", "ML_T3": "Sân Bay" } },
+      "SC": { ten: "XNCN Sốp Cộp", tram: { "SC_T1": "Trạm chính SC", "SC_T2": "Trạm Nậm Lạnh", "SC_T3": "Trạm Pói Lanh", "SC_T4": "Trạm Dổm Cang", "SC_T5": "Trạm Mường Và + Bản pặt" } },
+      "ML": { ten: "XNCN Mường La", tram: { "ML_T1": "Bệnh Viện", "ML_T2": "Bệnh Viện (tuyến áp cao)", "ML_T3": "Bệnh Viện (tuyến áp thấp)", "ML_T4": "Nà Lốc", "ML_T5": "Sân Bay" } },
       "QN": { ten: "XNCN Quỳnh Nhai", tram: { "QN_T1": "Trạm chính QN" } }
     };
 
-    let currentUser = null; // Lưu phiên đăng nhập
+    let currentUser = null; 
+    let cachedData = []; // BỘ NHỚ TẠM RAM
+    let chartInstanceLine = null;
+    let chartInstanceBar = null;
 
     // 1. CHỨC NĂNG ĐĂNG NHẬP
     function handleLogin() {
       const email = document.getElementById('loginEmail').value.trim();
       if(!email) return alert("Vui lòng nhập Email!");
       
-      document.getElementById('btnLogin').innerText = "Đang kiểm tra quyền...";
+      const btn = document.getElementById('btnLogin');
+      btn.innerText = "Đang kiểm tra quyền & Tải dữ liệu...";
       
       fetch(API_URL + "?action=getUserRole&email=" + encodeURIComponent(email))
         .then(res => res.json())
@@ -165,165 +190,220 @@
             currentUser = data;
             document.getElementById('loginScreen').classList.add('hidden');
             document.getElementById('mainApp').classList.remove('hidden');
-            
-            // Render Info
             document.getElementById('userName').innerText = data.name;
             document.getElementById('userRoleStr').innerText = data.role === 'ADMIN' ? 'Quản trị hệ thống' : 'Quản lý đơn vị';
             
-            initUI(); // Khởi tạo giao diện dựa trên quyền
+            initUI();
+            fetchDatabaseOffline(); 
           } else {
             alert(data.message || "Tài khoản không có quyền truy cập!");
-            document.getElementById('btnLogin').innerText = "Đăng nhập hệ thống";
+            btn.innerText = "Đăng nhập hệ thống";
           }
-        })
-        .catch(err => { alert("Lỗi kết nối máy chủ Google!"); document.getElementById('btnLogin').innerText = "Đăng nhập hệ thống"; });
+        }).catch(err => { alert("Lỗi kết nối máy chủ Google!"); btn.innerText = "Đăng nhập hệ thống"; });
     }
     
     function logout() { location.reload(); }
 
-    // 2. KHỞI TẠO GIAO DIỆN & DROPDOWN DỰA THEO QUYỀN (Role-Based)
+    // TẢI 1 LẦN DUY NHẤT LÚC ĐĂNG NHẬP VÀO RAM
+    function fetchDatabaseOffline() {
+        const btnLoc = document.getElementById('btnLocDashboard');
+        btnLoc.innerText = "Đang tải dữ liệu...";
+        
+        fetch(`${API_URL}?action=getAllData&donVi=${currentUser.donVi}&role=${currentUser.role}`)
+        .then(res => res.json())
+        .then(res => {
+            if(res.status === 'SUCCESS') {
+                cachedData = res.data; 
+                fetchLastIndex(); 
+                processDashboard(); 
+                btnLoc.innerText = "Đồng bộ & Lọc";
+            }
+        });
+    }
+
+    // 2. KHỞI TẠO GIAO DIỆN DROPDOWN
     function initUI() {
       const selectDV = document.getElementById('maDonVi');
       const filterDV = document.getElementById('filterDonVi');
-      
       selectDV.innerHTML = '';
+      
       if(currentUser.role === 'ADMIN') {
-        // Render toàn bộ Đơn vị
         for(let key in DULIEU_DANHMUC) {
           selectDV.innerHTML += `<option value="${key}">${DULIEU_DANHMUC[key].ten}</option>`;
           filterDV.innerHTML += `<option value="${key}">${DULIEU_DANHMUC[key].ten}</option>`;
         }
       } else {
-        // Chỉ Render Đơn vị được phép của nhân viên đó
         let key = currentUser.donVi;
         if(DULIEU_DANHMUC[key]) {
           selectDV.innerHTML = `<option value="${key}">${DULIEU_DANHMUC[key].ten}</option>`;
           filterDV.innerHTML = `<option value="${key}">${DULIEU_DANHMUC[key].ten}</option>`;
-          selectDV.setAttribute('readonly', true); // Khóa dropdown
-          selectDV.classList.add('bg-slate-200');
+          selectDV.setAttribute('readonly', true); 
+          selectDV.classList.add('bg-slate-200', 'pointer-events-none');
         }
       }
       
-      // Load Trạm mặc định cho đơn vị đầu tiên
       updateStationDropdown('maDonVi', 'maTram');
       updateStationDropdown('filterDonVi', 'filterTram', true);
       
-      // Set Ngày mặc định
       document.getElementById('ngayGhi').valueAsDate = new Date();
       let d = new Date();
       document.getElementById('filterTuNgay').valueAsDate = new Date(d.getFullYear(), d.getMonth()-1, 27);
       document.getElementById('filterDenNgay').valueAsDate = new Date(d.getFullYear(), d.getMonth(), 26);
     }
 
-    // Cập nhật Dropdown Trạm theo Đơn vị (Cascading)
     function updateStationDropdown(idDonVi, idTram, isFilter = false) {
       const maDV = document.getElementById(idDonVi).value;
       const selectTram = document.getElementById(idTram);
       selectTram.innerHTML = isFilter ? '<option value="ALL">Tất cả Trạm</option>' : '';
-      
       if(maDV !== 'ALL' && DULIEU_DANHMUC[maDV]) {
-        const trams = DULIEU_DANHMUC[maDV].tram;
-        for(let tKey in trams) {
-          selectTram.innerHTML += `<option value="${tKey}">${trams[tKey]}</option>`;
+        for(let tKey in DULIEU_DANHMUC[maDV].tram) {
+          selectTram.innerHTML += `<option value="${tKey}">${DULIEU_DANHMUC[maDV].tram[tKey]}</option>`;
         }
       }
-      // Nếu là Form nhập liệu, gọi API lấy chỉ số cuối của trạm đầu tiên vừa load
-      if(!isFilter) fetchLastIndex(); 
+      if(!isFilter && cachedData.length > 0) fetchLastIndex(); 
     }
 
-    // 3. TỰ ĐỘNG GỌI API LẤY CHỈ SỐ CUỐI ĐIỀN VÀO CHỈ SỐ ĐẦU
+    // TÌM CHỈ SỐ CUỐI TỪ RAM
     function fetchLastIndex() {
       const maTram = document.getElementById('maTram').value;
-      const lblLoading = document.getElementById('loadingIdx');
-      const elChiSoDau = document.getElementById('chiSoDau');
-      
-      if(!maTram) return;
-      
-      lblLoading.classList.remove('hidden');
-      elChiSoDau.value = ""; // Clear số cũ
-      
-      fetch(`${API_URL}?action=getLastIndex&maTram=${maTram}`)
-        .then(res => res.json())
-        .then(data => {
-          elChiSoDau.value = data.chiSoCuoi || 0; // Gán tự động vào Chỉ Số Đầu (Đã bị khóa readonly)
-          lblLoading.classList.add('hidden');
-          calc(); // Tính lại sản lượng
-        })
-        .catch(err => {
-          lblLoading.innerText = "Lỗi!";
-        });
+      let lastRow = cachedData.find(row => row.maTram === maTram); 
+      document.getElementById('chiSoDau').value = lastRow ? lastRow.chiSoCuoi : 0;
+      calc();
     }
 
-    // 4. TÍNH TOÁN SẢN LƯỢNG
-    const elDau = document.getElementById('chiSoDau');
-    const elCuoi = document.getElementById('chiSoCuoi');
-    const elPhat = document.getElementById('sanLuongPhat');
-    const elXaRua = document.getElementById('sanLuongXaRua');
-
+    // 3. TÍNH TOÁN
     function calc() {
-      let d = parseFloat(elDau.value) || 0;
-      let c = parseFloat(elCuoi.value) || 0;
-      let xr = parseFloat(elXaRua.value) || 0;
+      let d = parseFloat(document.getElementById('chiSoDau').value) || 0;
+      let c = parseFloat(document.getElementById('chiSoCuoi').value) || 0;
+      let xr = parseFloat(document.getElementById('sanLuongXaRua').value) || 0;
+      let p = (c - d) - xr;
       
-      let ketQua = (c - d) - xr;
-      
-      // Báo đỏ nếu người dùng nhập số cuối nhỏ hơn số đầu (Sai logic)
-      if(ketQua < 0) {
-        elCuoi.classList.add('border-red-500', 'bg-red-50');
-        elPhat.value = 0;
-      } else {
-        elCuoi.classList.remove('border-red-500', 'bg-red-50');
-        elPhat.value = ketQua;
+      const elCuoi = document.getElementById('chiSoCuoi');
+      if(p < 0 && c > 0) { 
+          elCuoi.classList.add('border-red-500', 'bg-red-50'); 
+          document.getElementById('sanLuongPhat').value = 0; 
+      } else { 
+          elCuoi.classList.remove('border-red-500', 'bg-red-50'); 
+          document.getElementById('sanLuongPhat').value = Math.max(0, p); 
       }
     }
-    elCuoi.addEventListener('input', calc);
-    elXaRua.addEventListener('input', calc);
+    document.getElementById('chiSoCuoi').addEventListener('input', calc);
+    document.getElementById('sanLuongXaRua').addEventListener('input', calc);
 
-    // 5. GỬI SỐ LIỆU (POST) LÊN GOOGLE SHEETS
+    // 4. LƯU SỐ LIỆU VÀO DB
     document.getElementById('inputForm').addEventListener('submit', function(e) {
         e.preventDefault();
-        
-        let c = parseFloat(elCuoi.value) || 0;
-        let d = parseFloat(elDau.value) || 0;
+        let c = parseFloat(document.getElementById('chiSoCuoi').value) || 0;
+        let d = parseFloat(document.getElementById('chiSoDau').value) || 0;
         if(c < d) return alert("CẢNH BÁO: Chỉ số cuối không được nhỏ hơn Chỉ số đầu!");
 
         const payload = {
             ngayGhi: document.getElementById('ngayGhi').value,
             maDonVi: document.getElementById('maDonVi').value,
             maTram: document.getElementById('maTram').value,
-            chiSoDau: d,
-            chiSoCuoi: c,
+            chiSoDau: d, chiSoCuoi: c,
             sanLuongPhat: document.getElementById('sanLuongPhat').value,
             sanLuongXaRua: document.getElementById('sanLuongXaRua').value,
-            nguoiNhap: currentUser.email // Lấy đúng email đã đăng nhập
+            nguoiNhap: currentUser.email
         };
         
         const btn = document.getElementById('btnSubmitForm');
-        const oldText = btn.innerText;
-        btn.innerText = "Đang lưu...";
-        btn.disabled = true;
+        btn.innerText = "Đang lưu lên hệ thống..."; btn.disabled = true;
 
         fetch(API_URL, {
-            method: 'POST',
-            mode: 'no-cors', // Bỏ qua lỗi CORS
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // Dùng text/plain để tránh preflight
+            method: 'POST', mode: 'no-cors',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
             body: JSON.stringify(payload)
         }).then(() => {
             alert("Lưu Chỉ Số Thành Công!");
-            btn.innerText = oldText;
-            btn.disabled = false;
+            btn.innerText = "LƯU CHỈ SỐ VÀO DATABASE"; btn.disabled = false;
             
-            // Thành công thì gán Chỉ số cuối vừa nhập thành Chỉ số đầu của lần nhập tiếp theo
+            // Ép vào Cache để ko cần tải lại trang
+            cachedData.unshift({ maDonVi: payload.maDonVi, maTram: payload.maTram, chiSoCuoi: payload.chiSoCuoi, sanLuongPhat: payload.sanLuongPhat, ngay: payload.ngayGhi });
+            
             document.getElementById('chiSoDau').value = payload.chiSoCuoi;
             document.getElementById('chiSoCuoi').value = "";
-            document.getElementById('sanLuongXaRua').value = 0;
             document.getElementById('sanLuongPhat').value = "";
-            
-        }).catch(err => {
-            alert("Mạng chậm, vui lòng thử lại!");
-            btn.innerText = oldText;
-            btn.disabled = false;
+            processDashboard(); 
+        }).catch(err => { alert("Lỗi mạng!"); btn.innerText = "LƯU CHỈ SỐ VÀO DATABASE"; btn.disabled = false; });
+    });
+
+    // 5. XỬ LÝ DASHBOARD ĐA TẦNG (Tốc độ ánh sáng từ RAM)
+    function processDashboard() {
+        if(cachedData.length === 0) return;
+        
+        const tuNgay = document.getElementById('filterTuNgay').value;
+        const denNgay = document.getElementById('filterDenNgay').value;
+        const fDonVi = document.getElementById('filterDonVi').value;
+        const fTram = document.getElementById('filterTram').value;
+
+        // Lọc dữ liệu
+        let filtered = cachedData.filter(row => {
+            let passNgay = row.ngay >= tuNgay && row.ngay <= denNgay;
+            let passDV = (fDonVi === 'ALL' || row.maDonVi === fDonVi);
+            let passTram = (fTram === 'ALL' || row.maTram === fTram);
+            return passNgay && passDV && passTram;
         });
+
+        // Tính KPI
+        let tong = 0, maxPhat = 0;
+        let dayMap = {}; 
+        let unitMap = {}; 
+        
+        filtered.forEach(row => {
+            let sp = parseFloat(row.sanLuongPhat) || 0;
+            tong += sp;
+            
+            if(!dayMap[row.ngay]) dayMap[row.ngay] = 0;
+            dayMap[row.ngay] += sp;
+
+            let tenDV = DULIEU_DANHMUC[row.maDonVi] ? DULIEU_DANHMUC[row.maDonVi].ten : row.maDonVi;
+            if(!unitMap[tenDV]) unitMap[tenDV] = 0;
+            unitMap[tenDV] += sp;
+        });
+
+        let arrDays = Object.keys(dayMap).sort(); 
+        let arrValues = [];
+        arrDays.forEach(d => {
+            arrValues.push(dayMap[d]);
+            if(dayMap[d] > maxPhat) maxPhat = dayMap[d];
+        });
+
+        let tb = arrDays.length > 0 ? (tong / arrDays.length) : 0;
+
+        document.getElementById('kpiTong').innerHTML = tong.toLocaleString() + ' <span class="text-base font-normal">m³</span>';
+        document.getElementById('kpiTB').innerHTML = Math.round(tb).toLocaleString() + ' <span class="text-base font-normal">m³</span>';
+        document.getElementById('kpiMax').innerHTML = Math.round(maxPhat).toLocaleString() + ' <span class="text-base font-normal">m³</span>';
+
+        if(chartInstanceLine) chartInstanceLine.destroy();
+        if(chartInstanceBar) chartInstanceBar.destroy();
+
+        // LINE CHART
+        const ctxLine = document.getElementById('lineChart').getContext('2d');
+        chartInstanceLine = new Chart(ctxLine, {
+            type: 'line',
+            data: {
+                labels: arrDays.map(d => d.slice(5)), 
+                datasets: [{ label: 'Sản lượng (m³)', data: arrValues, borderColor: '#2563eb', backgroundColor: 'rgba(37, 99, 235, 0.1)', fill: true, tension: 0.2 }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: 'Diễn biến theo ngày' } } }
+        });
+
+        // BAR CHART
+        const ctxBar = document.getElementById('barChart').getContext('2d');
+        chartInstanceBar = new Chart(ctxBar, {
+            type: 'bar',
+            data: {
+                labels: Object.keys(unitMap),
+                datasets: [{ label: 'Sản lượng (m³)', data: Object.values(unitMap), backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#6366f1', '#ec4899', '#8b5cf6'] }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: 'So sánh Đơn vị' } } }
+        });
+    }
+
+    document.getElementById('btnLocDashboard').addEventListener('click', () => {
+        // Có thể gọi lại fetchDatabaseOffline() để lấy dữ liệu tươi nếu thích
+        processDashboard();
     });
   </script>
 </body>
